@@ -1,0 +1,14 @@
+flask==2.3.3
+flask-cors==4.0.0
+flask-socketio==5.3.6
+pandas
+numpy
+scikit-learn
+imbalanced-learn
+matplotlib
+seaborn
+plotly
+scapy
+psutil
+python-socketio==5.8.0
+eventlet==0.33.3
