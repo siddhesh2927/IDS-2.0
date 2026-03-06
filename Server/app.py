@@ -36,90 +36,7 @@ def index():
         }
     })
 
-@app.route('/api/dataset/load', methods=['POST'])
-def load_dataset():
-    """Load dataset for training"""
-    try:
-        data = request.get_json()
-        filename = data.get('filename')
-        
-        if not filename:
-            return jsonify({'error': 'Filename is required'}), 400
-        
-        filepath = os.path.join('uploads', filename)
-        
-        if not os.path.exists(filepath):
-            return jsonify({'error': f'File {filename} not found in uploads directory'}), 404
-        
-        # Load dataset
-        df = ml_system.load_dataset(filepath)
-        
-        # Get dataset info
-        dataset_info = {
-            'shape': df.shape,
-            'columns': df.columns.tolist(),
-            'dtypes': df.dtypes.to_dict(),
-            'missing_values': df.isnull().sum().to_dict(),
-            'target_distribution': df[ml_system.target_column].value_counts().to_dict() if ml_system.target_column in df.columns else {},
-            'sample_data': df.head().to_dict('records')
-        }
-        
-        return jsonify({
-            'success': True,
-            'message': f'Dataset {filename} loaded successfully',
-            'info': dataset_info
-        })
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
-@app.route('/api/train', methods=['POST'])
-def train_models():
-    """Train ML models"""
-    try:
-        data = request.get_json()
-        filename = data.get('filename')
-        
-        if not filename:
-            return jsonify({'error': 'Filename is required'}), 400
-        
-        filepath = os.path.join('uploads', filename)
-        
-        if not os.path.exists(filepath):
-            return jsonify({'error': f'File {filename} not found'}), 404
-        
-        # Load and preprocess data
-        df = ml_system.load_dataset(filepath)
-        X, y = ml_system.preprocess_data(df)
-        
-        # Train models
-        socketio.emit('training_status', {'status': 'started', 'message': 'Starting model training...'})
-        
-        results = ml_system.train_models(X, y)
-        
-        # Save models
-        ml_system.save_models()
-        
-        # Prepare results for response
-        training_results = {}
-        for model_name, model_data in results.items():
-            training_results[model_name] = {
-                'accuracy': float(model_data['accuracy']),
-                'report': model_data['report'],
-                'confusion_matrix': model_data['confusion_matrix']
-            }
-        
-        socketio.emit('training_status', {'status': 'completed', 'message': 'Model training completed!'})
-        
-        return jsonify({
-            'success': True,
-            'message': 'Models trained successfully',
-            'results': training_results
-        })
-        
-    except Exception as e:
-        socketio.emit('training_status', {'status': 'error', 'message': str(e)})
-        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/models', methods=['GET'])
 def get_models():
@@ -129,8 +46,11 @@ def get_models():
         if not ml_system.models:
             try:
                 ml_system.load_models()
-            except:
-                return jsonify({'error': 'No trained models found'}), 404
+            except Exception as load_err:
+                print(f"Error loading models: {load_err}")
+                return jsonify({
+                    'error': 'No trained models found. Please run the train_model.py script to train models manually.'
+                }), 404
         
         model_info = ml_system.get_model_info()
         

@@ -26,7 +26,14 @@ class IntrusionDetectionModels:
             # Load dataset
             df = pd.read_csv(filepath)
             
+            # Clean column names (remove leading/trailing spaces)
+            df.columns = df.columns.str.strip()
+            
             # Basic preprocessing
+            df = df.dropna()
+            
+            # Replace infinite values with NaN, then drop those rows too
+            df = df.replace([np.inf, -np.inf], np.nan)
             df = df.dropna()
             
             # Convert timestamp if exists
