@@ -280,25 +280,29 @@ class NetworkCapture:
         
         def capture_worker():
             try:
-                if interface:
-                    scapy.sniff(iface=interface, prn=self.packet_handler, store=False)
-                else:
-                    scapy.sniff(prn=self.packet_handler, store=False)
+                print(f"🟢 Starting real packet capture on interface: {interface or 'default'}")
+                scapy.sniff(
+                    iface=interface if interface else None,
+                    prn=self.packet_handler,
+                    store=False,
+                    stop_filter=lambda p: not self.is_capturing  # Stops loop when is_capturing = False
+                )
             except Exception as e:
                 print(f"Capture error: {e}")
-                self.is_capturing = False
+            finally:
+                self.is_capturing = False  # Always ensure flag is reset after thread exits
+                print("🔴 Packet capture stopped.")
         
-        self.capture_thread = threading.Thread(target=capture_worker)
-        self.capture_thread.daemon = True
+        self.capture_thread = threading.Thread(target=capture_worker, daemon=True)
         self.capture_thread.start()
         
         return True
     
     def stop_capture(self):
         """Stop packet capture"""
-        self.is_capturing = False
-        if self.capture_thread:
-            self.capture_thread.join(timeout=2)
+        self.is_capturing = False  # This triggers stop_filter in capture_worker
+        if self.capture_thread and self.capture_thread.is_alive():
+            self.capture_thread.join(timeout=5)
         return True
     
     def get_stats(self):

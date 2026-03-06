@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { PlayIcon, SquareIcon, NetworkIcon, AlertTriangleIcon, CheckCircleIcon } from 'lucide-react';
 import { networkAPI } from '../services/api';
 import { NetworkInterface, NetworkStats } from '../types';
@@ -10,27 +10,46 @@ const NetworkCapture: React.FC = () => {
   const [isCapturing, setIsCapturing] = useState(false);
   const [stats, setStats] = useState<NetworkStats | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // This ref prevents polling from overwriting isCapturing right after a button click
+  const pendingAction = useRef(false);
+
+  const fetchStats = useCallback(async () => {
+    // Don't overwrite the state when user just clicked start/stop
+    if (pendingAction.current) return;
+    try {
+      const response = await networkAPI.getStats();
+      setStats(response.data);
+      setIsCapturing(response.data.is_capturing);
+    } catch (err) {
+      // silently ignore poll errors
+    }
+  }, []);
 
   useEffect(() => {
-    fetchInterfaces();
-    
-    // Listen for network stats updates
-    socketService.on('network_stats', (data: NetworkStats) => {
+    // Connect socket and subscribe to real-time stats
+    socketService.connect();
+
+    const handleNetworkStats = (data: NetworkStats) => {
       setStats(data);
-      setIsCapturing(data.is_capturing);
-    });
+      if (!pendingAction.current) {
+        setIsCapturing(data.is_capturing);
+      }
+    };
+
+    socketService.on('network_stats', handleNetworkStats);
+
+    fetchInterfaces();
+    fetchStats();
+
+    const interval = setInterval(fetchStats, 3000);
 
     return () => {
-      socketService.off('network_stats', () => {});
+      socketService.off('network_stats', handleNetworkStats);
+      clearInterval(interval);
     };
-  }, []);
-
-  useEffect(() => {
-    // Fetch initial stats
-    fetchStats();
-    const interval = setInterval(fetchStats, 2000); // Update every 2 seconds
-    return () => clearInterval(interval);
-  }, []);
+  }, [fetchStats]);
 
   const fetchInterfaces = async () => {
     try {
@@ -39,42 +58,40 @@ const NetworkCapture: React.FC = () => {
       if (response.data.interfaces.length > 0) {
         setSelectedInterface(response.data.interfaces[0].name);
       }
-    } catch (error) {
-      console.error('Failed to fetch interfaces:', error);
-    }
-  };
-
-  const fetchStats = async () => {
-    try {
-      const response = await networkAPI.getStats();
-      setStats(response.data);
-      setIsCapturing(response.data.is_capturing);
-    } catch (error) {
-      console.error('Failed to fetch stats:', error);
+    } catch (err) {
+      console.error('Failed to fetch interfaces:', err);
     }
   };
 
   const handleStartCapture = async () => {
     setLoading(true);
+    setError(null);
+    pendingAction.current = true;
+    setIsCapturing(true); // Optimistic update
     try {
       await networkAPI.startCapture(selectedInterface || undefined);
-      setIsCapturing(true);
-    } catch (error) {
-      console.error('Failed to start capture:', error);
+    } catch (err: any) {
+      setIsCapturing(false);
+      setError(err?.response?.data?.error || 'Failed to start capture. Make sure you are running the backend as Administrator.');
     } finally {
       setLoading(false);
+      // Allow polling again after 3 seconds
+      setTimeout(() => { pendingAction.current = false; }, 3000);
     }
   };
 
   const handleStopCapture = async () => {
     setLoading(true);
+    setError(null);
+    pendingAction.current = true;
+    setIsCapturing(false); // Optimistic update
     try {
       await networkAPI.stopCapture();
-      setIsCapturing(false);
-    } catch (error) {
-      console.error('Failed to stop capture:', error);
+    } catch (err: any) {
+      setError(err?.response?.data?.error || 'Failed to stop capture.');
     } finally {
       setLoading(false);
+      setTimeout(() => { pendingAction.current = false; }, 3000);
     }
   };
 
@@ -82,21 +99,17 @@ const NetworkCapture: React.FC = () => {
     try {
       await networkAPI.clearAlerts();
       await fetchStats();
-    } catch (error) {
-      console.error('Failed to clear alerts:', error);
+    } catch (err) {
+      console.error('Failed to clear alerts:', err);
     }
   };
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {
-      case 'high':
-        return 'bg-red-50 border-red-200 text-red-800';
-      case 'medium':
-        return 'bg-yellow-50 border-yellow-200 text-yellow-800';
-      case 'low':
-        return 'bg-blue-50 border-blue-200 text-blue-800';
-      default:
-        return 'bg-gray-50 border-gray-200 text-gray-800';
+      case 'high': return 'bg-red-50 border-red-200 text-red-800';
+      case 'medium': return 'bg-yellow-50 border-yellow-200 text-yellow-800';
+      case 'low': return 'bg-blue-50 border-blue-200 text-blue-800';
+      default: return 'bg-gray-50 border-gray-200 text-gray-800';
     }
   };
 
@@ -106,32 +119,43 @@ const NetworkCapture: React.FC = () => {
       <div>
         <h2 className="text-2xl font-bold text-gray-900">Network Capture</h2>
         <p className="mt-1 text-sm text-gray-600">
-          Monitor network traffic and detect intrusions in real-time
+          Monitor <strong>real network traffic</strong> and detect intrusions in real-time using Scapy
         </p>
       </div>
+
+      {/* Error Banner */}
+      {error && (
+        <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-red-800 text-sm">
+          <strong>⚠️ Error:</strong> {error}
+        </div>
+      )}
 
       {/* Control Panel */}
       <div className="card">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Capture Control</h3>
-        
+
         <div className="space-y-4">
           {/* Interface Selection */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Network Interface
             </label>
-            <select
-              className="input-field"
-              value={selectedInterface}
-              onChange={(e) => setSelectedInterface(e.target.value)}
-              disabled={isCapturing}
-            >
-              {interfaces.map((iface) => (
-                <option key={iface.name} value={iface.name}>
-                  {iface.name} - {iface.ip}
-                </option>
-              ))}
-            </select>
+            {interfaces.length === 0 ? (
+              <p className="text-sm text-red-500">⚠️ No interfaces found. Make sure backend is running as Administrator.</p>
+            ) : (
+              <select
+                className="input-field"
+                value={selectedInterface}
+                onChange={(e) => setSelectedInterface(e.target.value)}
+                disabled={isCapturing}
+              >
+                {interfaces.map((iface) => (
+                  <option key={iface.name} value={iface.name}>
+                    {iface.name} — {iface.ip}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           {/* Control Buttons */}
@@ -143,7 +167,7 @@ const NetworkCapture: React.FC = () => {
                 className="btn-success disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <PlayIcon className="h-4 w-4 mr-2" />
-                Start Capture
+                {loading ? 'Starting...' : 'Start Capture'}
               </button>
             ) : (
               <button
@@ -152,10 +176,10 @@ const NetworkCapture: React.FC = () => {
                 className="btn-danger disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <SquareIcon className="h-4 w-4 mr-2" />
-                Stop Capture
+                {loading ? 'Stopping...' : 'Stop Capture'}
               </button>
             )}
-            
+
             <button
               onClick={handleClearAlerts}
               disabled={loading}
@@ -169,7 +193,9 @@ const NetworkCapture: React.FC = () => {
           <div className="flex items-center">
             <div className={`h-3 w-3 rounded-full mr-2 ${isCapturing ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`}></div>
             <span className="text-sm font-medium text-gray-700">
-              {isCapturing ? 'Capturing traffic...' : 'Capture stopped'}
+              {isCapturing
+                ? `🟢 Capturing real network traffic on: ${selectedInterface || 'default interface'}`
+                : '⚪ Capture stopped'}
             </span>
           </div>
         </div>
@@ -184,7 +210,7 @@ const NetworkCapture: React.FC = () => {
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Total Packets</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {stats.stats.total_packets?.toLocaleString() || '0'}
+                  {stats.stats?.total_packets?.toLocaleString() || '0'}
                 </p>
               </div>
             </div>
@@ -198,7 +224,7 @@ const NetworkCapture: React.FC = () => {
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Data Processed</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {((stats.stats.total_bytes || 0) / 1024 / 1024).toFixed(2)} MB
+                  {((stats.stats?.total_bytes || 0) / 1024 / 1024).toFixed(2)} MB
                 </p>
               </div>
             </div>
@@ -210,7 +236,7 @@ const NetworkCapture: React.FC = () => {
                 <AlertTriangleIcon className="h-5 w-5 text-yellow-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Queue Size</p>
+                <p className="text-sm font-medium text-gray-600">Packet Queue</p>
                 <p className="text-2xl font-bold text-gray-900">
                   {stats.queue_size || '0'}
                 </p>
@@ -240,10 +266,7 @@ const NetworkCapture: React.FC = () => {
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Alerts</h3>
           <div className="space-y-3 max-h-96 overflow-y-auto">
             {stats.recent_alerts.map((alert, index) => (
-              <div
-                key={index}
-                className={`p-4 rounded-lg border ${getSeverityColor(alert.severity)}`}
-              >
+              <div key={index} className={`p-4 rounded-lg border ${getSeverityColor(alert.severity)}`}>
                 <div className="flex items-start">
                   <AlertTriangleIcon className="h-5 w-5 mt-0.5 mr-3 flex-shrink-0" />
                   <div className="flex-1">
@@ -270,7 +293,7 @@ const NetworkCapture: React.FC = () => {
             <CheckCircleIcon className="h-12 w-12 text-green-400 mx-auto" />
             <p className="mt-2 text-sm text-gray-600">No alerts detected</p>
             <p className="text-xs text-gray-500 mt-1">
-              {isCapturing ? 'Monitoring network traffic...' : 'Start capture to begin monitoring'}
+              {isCapturing ? 'Monitoring real network traffic...' : 'Start capture to begin monitoring'}
             </p>
           </div>
         </div>
