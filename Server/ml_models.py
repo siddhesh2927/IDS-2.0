@@ -8,6 +8,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
 import pickle
 import os
+import json
 from datetime import datetime
 import warnings
 warnings.filterwarnings('ignore')
@@ -166,6 +167,19 @@ class IntrusionDetectionModels:
             with open(os.path.join(model_dir, "features.pkl"), 'wb') as f:
                 pickle.dump(self.feature_columns, f)
                 
+            # Save metrics
+            metrics = {}
+            for model_name, model_data in self.models.items():
+                if isinstance(model_data, dict) and 'accuracy' in model_data:
+                    metrics[model_name] = {
+                        'accuracy': model_data['accuracy'],
+                        'report': model_data['report'],
+                        'confusion_matrix': model_data['confusion_matrix']
+                    }
+            
+            with open(os.path.join(model_dir, "metrics.json"), 'w') as f:
+                json.dump(metrics, f, indent=4)
+                
             return True
             
         except Exception as e:
@@ -194,6 +208,14 @@ class IntrusionDetectionModels:
                 if os.path.exists(model_path):
                     with open(model_path, 'rb') as f:
                         self.models[model_name] = pickle.load(f)
+            
+            # Load metrics
+            metrics_path = os.path.join(model_dir, "metrics.json")
+            if os.path.exists(metrics_path):
+                with open(metrics_path, 'r') as f:
+                    self.metrics = json.load(f)
+            else:
+                self.metrics = {}
             
             return True
             
@@ -243,11 +265,15 @@ class IntrusionDetectionModels:
     
     def get_model_info(self):
         """Get information about trained models"""
+        if hasattr(self, 'metrics') and self.metrics:
+            return self.metrics
+            
         info = {}
         for model_name, model_data in self.models.items():
             if isinstance(model_data, dict) and 'accuracy' in model_data:
                 info[model_name] = {
                     'accuracy': model_data['accuracy'],
-                    'report': model_data['report']
+                    'report': model_data['report'],
+                    'confusion_matrix': model_data['confusion_matrix']
                 }
         return info

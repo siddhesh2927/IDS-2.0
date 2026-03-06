@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard';
 
 import NetworkCapture from './pages/NetworkCapture';
 import LiveMonitor from './pages/LiveMonitor';
+import Models from './pages/Models';
 import socketService from './services/socket';
 
 function App() {
@@ -20,14 +21,16 @@ function App() {
   const renderPage = () => {
     switch (currentPage) {
       case 'dashboard':
-        return <Dashboard />;
+        return <Dashboard onPageChange={setCurrentPage} />;
 
       case 'network':
         return <NetworkCapture />;
       case 'monitor':
         return <LiveMonitor />;
+      case 'models':
+        return <Models />;
       default:
-        return <Dashboard />;
+        return <Dashboard onPageChange={setCurrentPage} />;
     }
   };
 

@@ -12,6 +12,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageChange }) 
     { name: 'Dashboard', id: 'dashboard', icon: ShieldIcon },
     { name: 'Network Capture', id: 'network', icon: NetworkIcon },
     { name: 'Live Monitor', id: 'monitor', icon: ActivityIcon },
+    { name: 'Model Performance', id: 'models', icon: BrainIcon },
   ];
 
   return (
@@ -47,8 +48,8 @@ const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageChange }) 
                   key={item.id}
                   onClick={() => onPageChange(item.id)}
                   className={`flex items-center px-1 py-4 border-b-2 text-sm font-medium transition-colors duration-200 ${currentPage === item.id
-                      ? 'border-primary-500 text-primary-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    ? 'border-primary-500 text-primary-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                     }`}
                 >
                   <Icon className="h-4 w-4 mr-2" />

@@ -4,7 +4,11 @@ import { networkAPI } from '../services/api';
 import { NetworkStats } from '../types';
 import socketService from '../services/socket';
 
-const Dashboard: React.FC = () => {
+interface DashboardProps {
+  onPageChange?: (page: string) => void;
+}
+
+const Dashboard: React.FC<DashboardProps> = ({ onPageChange }) => {
   const [stats, setStats] = useState<NetworkStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [captureLoading, setCaptureLoading] = useState(false);
@@ -138,8 +142,8 @@ const Dashboard: React.FC = () => {
 
       {/* Capture Status Banner */}
       <div className={`p-4 rounded-lg border flex items-center justify-between ${isCapturing
-          ? 'bg-green-50 border-green-200'
-          : 'bg-gray-50 border-gray-200'
+        ? 'bg-green-50 border-green-200'
+        : 'bg-gray-50 border-gray-200'
         }`}>
         <div className="flex items-center space-x-3">
           <div className={`h-3 w-3 rounded-full ${isCapturing ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`}></div>
@@ -197,19 +201,19 @@ const Dashboard: React.FC = () => {
               <div
                 key={index}
                 className={`p-3 rounded-lg border ${alert.severity === 'high'
-                    ? 'bg-red-50 border-red-200'
-                    : alert.severity === 'medium'
-                      ? 'bg-yellow-50 border-yellow-200'
-                      : 'bg-blue-50 border-blue-200'
+                  ? 'bg-red-50 border-red-200'
+                  : alert.severity === 'medium'
+                    ? 'bg-yellow-50 border-yellow-200'
+                    : 'bg-blue-50 border-blue-200'
                   }`}
               >
                 <div className="flex items-start">
                   <AlertTriangleIcon
                     className={`h-5 w-5 mt-0.5 ${alert.severity === 'high'
-                        ? 'text-red-600'
-                        : alert.severity === 'medium'
-                          ? 'text-yellow-600'
-                          : 'text-blue-600'
+                      ? 'text-red-600'
+                      : alert.severity === 'medium'
+                        ? 'text-yellow-600'
+                        : 'text-blue-600'
                       }`}
                   />
                   <div className="ml-3 flex-1">
@@ -292,9 +296,12 @@ const Dashboard: React.FC = () => {
             <a href="/network" className="btn-primary w-full block text-center">
               View Network Details
             </a>
-            <a href="/models" className="btn-primary w-full block text-center">
+            <button
+              onClick={() => onPageChange && onPageChange('models')}
+              className="btn-primary w-full block text-center"
+            >
               View Model Performance
-            </a>
+            </button>
           </div>
         </div>
       </div>
